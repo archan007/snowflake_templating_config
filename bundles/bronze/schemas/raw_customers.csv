@@ -1,0 +1,7 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+CUSTOMER_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique customer identifier
+CUSTOMER_NAME,VARCHAR(256),true,,,,false,false,Full customer name
+EMAIL,VARCHAR(256),true,,PII,,false,false,Customer email address
+COUNTRY_CODE,VARCHAR(3),true,,,,false,false,ISO country code
+CREATED_AT,TIMESTAMP_NTZ,true,,,,true,false,Customer record creation time
+LOADED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Load timestamp

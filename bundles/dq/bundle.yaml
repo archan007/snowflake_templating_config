@@ -1,0 +1,93 @@
+# Data Quality bundle
+# Infrastructure tables, stored procedures, and tasks for the DQ framework.
+# All objects live in the DQ schema of the per-environment database.
+#
+# This bundle provides:
+#   - DQ_RULES: Rule definitions (seeded by engine from dq_rules/ YAML + user-created in Streamlit)
+#   - DQ_RESULTS: Execution results (populated by SP_DQ_EXECUTE_*)
+#   - DQ_RUN_LOG: Run metadata (populated by SP_DQ_EXECUTE_ALL)
+#   - DQ_DMF_CONFIG: Snowflake DMF assignment configuration
+#   - Stored procedures: SP_DQ_EXECUTE_ALL, SP_DQ_EXECUTE_RULE, SP_DQ_EXECUTE_BY_TABLE,
+#                        SP_DQ_SYNC_DMF_RESULTS, SP_DQ_ASSIGN_DMFS
+#   - Tasks: TSK_DQ_RUN_FINITE (scheduled), TSK_DQ_SYNC_DMF (scheduled)
+bundle_name: dq
+database: ${DATABASE}
+default_schema: DQ
+
+confirmed_drops: []
+
+tables:
+  - name: DQ_RULES
+    schema: DQ
+    description: "Data quality rule definitions (engine-managed and user-managed)"
+    schema_csv: schemas/dq_rules.csv
+
+  - name: DQ_RESULTS
+    schema: DQ
+    description: "Data quality execution results"
+    schema_csv: schemas/dq_results.csv
+
+  - name: DQ_RUN_LOG
+    schema: DQ
+    description: "Data quality run execution log"
+    schema_csv: schemas/dq_run_log.csv
+
+  - name: DQ_DMF_CONFIG
+    schema: DQ
+    description: "Snowflake Data Metric Function assignment configuration"
+    schema_csv: schemas/dq_dmf_config.csv
+
+stored_procedures:
+  - name: SP_DQ_EXECUTE_ALL
+    schema: DQ
+    signature: "(VARCHAR, VARCHAR)"
+    sql_file: sql/sp_dq_execute_all.sql
+
+  - name: SP_DQ_EXECUTE_RULE
+    schema: DQ
+    signature: "(VARCHAR, VARCHAR, VARCHAR)"
+    sql_file: sql/sp_dq_execute_rule.sql
+
+  - name: SP_DQ_EXECUTE_BY_TABLE
+    schema: DQ
+    signature: "(VARCHAR, VARCHAR)"
+    sql_file: sql/sp_dq_execute_by_table.sql
+
+  - name: SP_DQ_SYNC_DMF_RESULTS
+    schema: DQ
+    signature: "(VARCHAR)"
+    sql_file: sql/sp_dq_sync_dmf_results.sql
+
+  - name: SP_DQ_ASSIGN_DMFS
+    schema: DQ
+    signature: "()"
+    sql_file: sql/sp_dq_assign_dmfs.sql
+
+tasks:
+  - name: TSK_DQ_RUN_FINITE
+    schema: DQ
+    warehouse: ${DQ_WAREHOUSE}
+    schedule: "60 MINUTE"
+    sql_file: sql/tsk_dq_run_finite.sql
+
+  - name: TSK_DQ_SYNC_DMF
+    schema: DQ
+    warehouse: ${DQ_WAREHOUSE}
+    schedule: "120 MINUTE"
+    sql_file: sql/tsk_dq_sync_dmf.sql
+
+grants:
+  - role: ROLE_DQ_READER
+    privileges:
+      tables:
+        - SELECT
+      views:
+        - SELECT
+  - role: ROLE_DQ_WRITER
+    privileges:
+      tables:
+        - SELECT
+        - INSERT
+        - UPDATE
+      stored_procedures:
+        - USAGE

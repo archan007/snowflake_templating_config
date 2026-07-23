@@ -1,0 +1,58 @@
+# Data quality rules for RAW_ORDERS table
+# These rules are seeded into DQ_RULES by the engine with source='engine'.
+# Rule types: NOT_NULL, UNIQUE, ACCEPTED_VALUES, ROW_COUNT_RANGE,
+#             REFERENTIAL_INTEGRITY, RECENCY, CUSTOM_SQL, EXPRESSION
+
+target_table: RAW_ORDERS
+target_schema: BRONZE
+owner: data-engineering
+
+rules:
+  - name: raw_orders_order_id_not_null
+    type: NOT_NULL
+    column: ORDER_ID
+    severity: CRITICAL
+    description: "ORDER_ID must never be null - it is the primary business key"
+
+  - name: raw_orders_order_id_unique
+    type: UNIQUE
+    column: ORDER_ID
+    severity: CRITICAL
+    description: "ORDER_ID must be unique across all records"
+
+  - name: raw_orders_status_accepted_values
+    type: ACCEPTED_VALUES
+    column: ORDER_STATUS
+    severity: WARNING
+    description: "ORDER_STATUS must be one of the known lifecycle states"
+    parameters:
+      values:
+        - PENDING
+        - CONFIRMED
+        - SHIPPED
+        - DELIVERED
+        - CANCELLED
+        - RETURNED
+
+  - name: raw_orders_has_data
+    type: ROW_COUNT_RANGE
+    severity: CRITICAL
+    description: "RAW_ORDERS must contain at least 1 row (table should never be empty)"
+    parameters:
+      min: 1
+
+  - name: raw_orders_amount_positive
+    type: EXPRESSION
+    column: ORDER_AMOUNT
+    severity: WARNING
+    description: "ORDER_AMOUNT should be positive for non-cancelled orders"
+    parameters:
+      expression: '"ORDER_AMOUNT" >= 0 OR "ORDER_STATUS" IN (''CANCELLED'', ''RETURNED'')'
+
+  - name: raw_orders_freshness
+    type: RECENCY
+    column: LOADED_AT
+    severity: WARNING
+    description: "Data should be loaded within the last 6 hours"
+    parameters:
+      max_hours: 6

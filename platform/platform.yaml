@@ -1,0 +1,27 @@
+# Platform-level Snowflake configuration
+# Account-wide objects and shared variables used across all bundles.
+# Environment-specific overrides live in platform/overrides/<env>.yaml
+#
+# Any ${VAR} placeholder in bundle.yaml or this file is resolved from:
+#   1. Built-in: ${ENV}, ${ENV_LOWER}
+#   2. The `variables:` section of the environment override file
+
+variables:
+  # Defaults (overridden per environment)
+  WAREHOUSE_SIZE: XSMALL
+
+storage_integrations:
+  - name: SI_S3_${ENV}
+    type: EXTERNAL_STAGE
+    storage_provider: S3
+    enabled: true
+
+resource_monitors:
+  - name: RM_${ENV}_DEFAULT
+    credit_quota: 100
+    frequency: MONTHLY
+    triggers:
+      - threshold: 75
+        action: NOTIFY
+      - threshold: 100
+        action: SUSPEND

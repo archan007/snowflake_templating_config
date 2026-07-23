@@ -1,0 +1,24 @@
+# Data quality rules for RAW_CUSTOMERS table
+target_table: RAW_CUSTOMERS
+target_schema: BRONZE
+owner: data-engineering
+
+rules:
+  - name: raw_customers_customer_id_not_null
+    type: NOT_NULL
+    column: CUSTOMER_ID
+    severity: CRITICAL
+    description: "CUSTOMER_ID must never be null"
+
+  - name: raw_customers_customer_id_unique
+    type: UNIQUE
+    column: CUSTOMER_ID
+    severity: CRITICAL
+    description: "CUSTOMER_ID must be unique"
+
+  - name: raw_customers_has_data
+    type: ROW_COUNT_RANGE
+    severity: WARNING
+    description: "RAW_CUSTOMERS must not be empty"
+    parameters:
+      min: 1

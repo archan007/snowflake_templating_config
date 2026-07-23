@@ -1,0 +1,16 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+RULE_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique rule identifier
+RULE_NAME,VARCHAR(256),false,,,,false,false,Human-readable rule name
+RULE_TYPE,VARCHAR(32),false,,,,false,false,"Rule type: NOT_NULL, UNIQUE, ACCEPTED_VALUES, ROW_COUNT_RANGE, REFERENTIAL_INTEGRITY, RECENCY, CUSTOM_SQL, EXPRESSION"
+SOURCE,VARCHAR(16),false,'engine',,,false,false,"Origin: engine (YAML-managed) or user (Streamlit-managed)"
+TARGET_DATABASE,VARCHAR(128),false,,,,false,false,Target database name
+TARGET_SCHEMA,VARCHAR(128),false,,,,false,false,Target schema name
+TARGET_TABLE,VARCHAR(128),false,,,,false,false,Target table name
+TARGET_COLUMN,VARCHAR(128),true,,,,false,false,Target column (null for table-level rules)
+SEVERITY,VARCHAR(16),false,'WARNING',,,false,false,"Severity: CRITICAL, WARNING, INFO"
+PARAMETERS,VARIANT,true,,,,false,false,JSON parameters specific to rule_type (thresholds values etc)
+DESCRIPTION,VARCHAR(1024),true,,,,false,false,Business description of what the rule checks
+OWNER,VARCHAR(128),true,,,,false,false,Rule owner (team or person)
+IS_ACTIVE,BOOLEAN,false,TRUE,,,false,false,Whether the rule is active
+CREATED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Creation timestamp
+UPDATED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Last update timestamp

@@ -1,0 +1,50 @@
+# Gold layer bundle
+# Analytical objects (tables, views, dynamic tables, stored procs, tasks)
+# consumed by BI tools and downstream products.
+#
+# All gold objects live in the GOLD schema of the per-environment database.
+# Data products are organised into products/<product_id>/ subfolders for
+# convenience — naming is NOT enforced by the engine, so users may name
+# their objects however they like (e.g. PRODUCT_A__FCT_SALES, FCT_SALES_PA,
+# or just FCT_SALES). Avoid collisions.
+bundle_name: gold
+database: ${DATABASE}
+default_schema: GOLD
+
+confirmed_drops: []
+
+# ----------------------------------------------------------------------------
+# Product A — Sales analytics
+# ----------------------------------------------------------------------------
+
+tables:
+  - name: FCT_SALES
+    schema: GOLD
+    description: "Sales fact table (Product A)"
+    schema_csv: products/product_a/schemas/fct_sales.csv
+
+views:
+  - name: VW_SALES_SUMMARY
+    schema: GOLD
+    sql_file: products/product_a/sql/vw_sales_summary.sql
+
+dynamic_tables:
+  - name: DT_SALES_DAILY
+    schema: GOLD
+    warehouse: WH_${ENV}_XS
+    target_lag: "1 hour"
+    refresh_mode: AUTO
+    sql_file: products/product_a/sql/dt_sales_daily.sql
+
+stored_procedures:
+  - name: SP_REFRESH_SALES
+    schema: GOLD
+    signature: "()"
+    sql_file: products/product_a/sql/sp_refresh_sales.sql
+
+tasks:
+  - name: TSK_REFRESH_SALES_HOURLY
+    schema: GOLD
+    warehouse: WH_${ENV}_XS
+    schedule: "60 MINUTE"
+    sql_file: products/product_a/sql/tsk_refresh_sales_hourly.sql

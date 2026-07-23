@@ -1,0 +1,20 @@
+# DEV environment overrides
+# Merged on top of platform/platform.yaml when --env DEV is passed to the engine.
+# ${VAR} placeholders in bundles or platform.yaml are resolved from the
+# 'variables' block here (with ENV/ENV_LOWER automatically provided).
+
+variables:
+  WAREHOUSE_SIZE: XSMALL
+  DEFAULT_WAREHOUSE: WH_DEV_XS
+  DATABASE: DEV_FS_DB
+  DQ_WAREHOUSE: WH_DEV_DQ
+
+resource_monitors:
+  - name: RM_DEV_DEFAULT
+    credit_quota: 50         # smaller quota for DEV
+    frequency: MONTHLY
+    triggers:
+      - threshold: 80
+        action: NOTIFY
+      - threshold: 100
+        action: SUSPEND

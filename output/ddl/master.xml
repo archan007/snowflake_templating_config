@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+  <include file="changesets/create_file_format.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_stage.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_table.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_stream.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_view.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_dynamic_table.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_stored_procedure.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_task.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/grant_grant.sql" relativeToChangelogFile="true"/>
+</databaseChangeLog>

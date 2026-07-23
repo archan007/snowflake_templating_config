@@ -1,0 +1,18 @@
+# PROD environment overrides
+variables:
+  WAREHOUSE_SIZE: MEDIUM
+  DEFAULT_WAREHOUSE: WH_PROD_M
+  DATABASE: PROD_FS_DB
+  DQ_WAREHOUSE: WH_PROD_DQ
+
+resource_monitors:
+  - name: RM_PROD_DEFAULT
+    credit_quota: 500
+    frequency: MONTHLY
+    triggers:
+      - threshold: 75
+        action: NOTIFY
+      - threshold: 90
+        action: NOTIFY
+      - threshold: 100
+        action: SUSPEND

@@ -1,0 +1,50 @@
+# Data quality rules for FCT_SALES table (Gold layer)
+target_table: FCT_SALES
+target_schema: GOLD
+owner: analytics-team
+
+rules:
+  - name: fct_sales_order_id_not_null
+    type: NOT_NULL
+    column: ORDER_ID
+    severity: CRITICAL
+    description: "ORDER_ID is the business key and must never be null"
+
+  - name: fct_sales_order_id_unique
+    type: UNIQUE
+    column: ORDER_ID
+    severity: CRITICAL
+    description: "ORDER_ID must be unique in the fact table (no duplicate facts)"
+
+  - name: fct_sales_revenue_non_negative
+    type: EXPRESSION
+    column: REVENUE_USD
+    severity: WARNING
+    description: "Revenue should never be negative"
+    parameters:
+      expression: '"REVENUE_USD" >= 0 OR "REVENUE_USD" IS NULL'
+
+  - name: fct_sales_referential_integrity_orders
+    type: REFERENTIAL_INTEGRITY
+    column: ORDER_ID
+    severity: WARNING
+    description: "Every ORDER_ID in FCT_SALES must exist in RAW_ORDERS"
+    parameters:
+      reference_table: ${DATABASE}.BRONZE.RAW_ORDERS
+      reference_column: ORDER_ID
+
+  - name: fct_sales_freshness
+    type: RECENCY
+    column: LOADED_AT
+    severity: WARNING
+    description: "Fact table should be refreshed within the last 3 hours"
+    parameters:
+      max_hours: 3
+
+  - name: fct_sales_row_count_sanity
+    type: ROW_COUNT_RANGE
+    severity: INFO
+    description: "FCT_SALES should have a reasonable number of rows"
+    parameters:
+      min: 1
+      max: 100000000

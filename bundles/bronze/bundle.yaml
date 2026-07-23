@@ -1,0 +1,56 @@
+# Bronze layer bundle
+# Raw/landing tables, ingestion objects (stages, file formats, streams).
+# All objects live in the BRONZE schema of the per-environment database
+# (DEV_FS_DB / UAT_FS_DB / PROD_FS_DB), provided by ${DATABASE}.
+bundle_name: bronze
+database: ${DATABASE}
+default_schema: BRONZE
+
+# Explicit confirmed drops for table/view/dynamic_table (breaking changes).
+# Objects listed here will be dropped by the engine. Any drift where a
+# breaking-drop object is removed from this file without being listed here
+# will fail the build.
+confirmed_drops: []
+
+file_formats:
+  - name: FF_CSV_STANDARD
+    schema: BRONZE
+    type: CSV
+    options:
+      field_delimiter: ","
+      skip_header: 1
+      field_optionally_enclosed_by: "\""
+      null_if: ""
+      trim_space: true
+      error_on_column_count_mismatch: false
+
+  - name: FF_JSON_STANDARD
+    schema: BRONZE
+    type: JSON
+    options:
+      strip_outer_array: true
+
+stages:
+  - name: STG_ORDERS_LANDING
+    schema: BRONZE
+    url: "s3://my-data-lake-${ENV_LOWER}/orders/"
+    storage_integration: SI_S3_${ENV}
+    file_format: ${DATABASE}.BRONZE.FF_CSV_STANDARD
+
+tables:
+  - name: RAW_ORDERS
+    schema: BRONZE
+    description: "Raw orders landed from S3"
+    schema_csv: schemas/raw_orders.csv
+
+  - name: RAW_CUSTOMERS
+    schema: BRONZE
+    description: "Raw customer master data"
+    schema_csv: schemas/raw_customers.csv
+
+streams:
+  - name: STRM_RAW_ORDERS
+    schema: BRONZE
+    on_table: ${DATABASE}.BRONZE.RAW_ORDERS
+    append_only: true
+    show_initial_rows: false

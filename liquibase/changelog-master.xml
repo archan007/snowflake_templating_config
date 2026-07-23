@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Root Liquibase changelog — stable entry point.
+
+  This file is committed to the repo and never regenerated.
+  Its only job is to include the engine-generated master changelog
+  ../output/ddl/master.xml (relative to this file). That generated
+  file, and everything it references, is produced fresh by
+  `python -m engine.generate_ddl` on every CI run and is git-ignored.
+
+  If you need to add global preconditions, contexts, or labels that
+  apply to every deploy regardless of what the engine generated,
+  add them here — not in the generated file.
+-->
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <include file="../output/ddl/master.xml" relativeToChangelogFile="true"/>
+
+</databaseChangeLog>

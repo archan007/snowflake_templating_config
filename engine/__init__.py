@@ -1,0 +1,1 @@
+"""Snowflake platform templating engine."""

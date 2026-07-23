@@ -1,0 +1,10 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+ORDER_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique order identifier from source system
+CUSTOMER_ID,VARCHAR(64),true,,,,false,false,Customer identifier
+ORDER_DATE,TIMESTAMP_NTZ,true,,,,true,false,Order placement timestamp
+ORDER_STATUS,VARCHAR(32),true,'PENDING',,,false,false,Order lifecycle status
+ORDER_AMOUNT,"NUMBER(18,2)",true,,,,false,false,Total order amount in source currency
+CURRENCY_CODE,VARCHAR(3),true,,,,false,false,ISO 4217 currency code
+SOURCE_FILE,VARCHAR(512),true,,,METADATA$FILENAME,false,false,Source file name from stage
+LOADED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Load timestamp
+UPDATED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Update timestamp

@@ -1,0 +1,11 @@
+# Snowflake platform — Python dependencies
+# Pinned for reproducible CI builds. Bump deliberately, not drift.
+
+# YAML parsing for bundle.yaml / platform.yaml
+PyYAML==6.0.2
+
+# Snowflake driver — used by engine.state_reader for live state discovery
+snowflake-connector-python==3.13.1
+
+# Required for key-pair auth against Snowflake
+cryptography==43.0.3

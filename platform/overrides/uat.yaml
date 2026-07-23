@@ -1,0 +1,16 @@
+# UAT environment overrides
+variables:
+  WAREHOUSE_SIZE: SMALL
+  DEFAULT_WAREHOUSE: WH_UAT_S
+  DATABASE: UAT_FS_DB
+  DQ_WAREHOUSE: WH_UAT_DQ
+
+resource_monitors:
+  - name: RM_UAT_DEFAULT
+    credit_quota: 100
+    frequency: MONTHLY
+    triggers:
+      - threshold: 80
+        action: NOTIFY
+      - threshold: 100
+        action: SUSPEND

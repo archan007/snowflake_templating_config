@@ -1,0 +1,10 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+CONFIG_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique config identifier
+TARGET_DATABASE,VARCHAR(128),false,,,,false,false,Target database name
+TARGET_SCHEMA,VARCHAR(128),false,,,,false,false,Target schema name
+TARGET_TABLE,VARCHAR(128),false,,,,false,false,Target table name
+TARGET_COLUMN,VARCHAR(128),true,,,,false,false,Target column (null for table-level DMFs)
+DMF_NAME,VARCHAR(128),false,,,,false,false,"System DMF name: NULL_COUNT, DUPLICATE_COUNT, UNIQUE_COUNT, FRESHNESS"
+SCHEDULE_MINUTES,"NUMBER(18,0)",false,60,,,false,false,How often the DMF should evaluate (minutes)
+IS_ACTIVE,BOOLEAN,false,TRUE,,,false,false,Whether this DMF assignment is active
+CREATED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Creation timestamp

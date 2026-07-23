@@ -1,0 +1,8 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+SALES_SK,"NUMBER(38,0)",false,,surrogate,,false,false,Surrogate key
+ORDER_ID,VARCHAR(64),false,,,,false,true,Order business key
+CUSTOMER_SK,"NUMBER(38,0)",true,,,,false,false,FK to dim_customer
+ORDER_DATE,DATE,false,,,,true,false,Date of order
+REVENUE_USD,"NUMBER(18,2)",true,,,,false,false,Revenue converted to USD
+ORDER_COUNT,"NUMBER(18,0)",true,1,,,false,false,Count of orders (for aggregation)
+LOADED_AT,TIMESTAMP_NTZ,false,CURRENT_TIMESTAMP(),,,false,false,Load timestamp

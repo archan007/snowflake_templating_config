@@ -1,0 +1,15 @@
+# Silver layer bundle
+# Cleansed, conformed data. Most transformation happens in DBT;
+# this bundle defines the target tables that DBT writes into.
+# All objects live in the SILVER schema of the per-environment database.
+bundle_name: silver
+database: ${DATABASE}
+default_schema: SILVER
+
+confirmed_drops: []
+
+tables:
+  - name: DIM_CUSTOMER
+    schema: SILVER
+    description: "Conformed customer dimension"
+    schema_csv: schemas/dim_customer.csv

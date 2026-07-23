@@ -1,0 +1,11 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+RUN_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique run identifier
+RUN_TYPE,VARCHAR(32),false,'SCHEDULED',,,false,false,"Run type: SCHEDULED, AD_HOC, DEPLOYMENT"
+START_TIME,TIMESTAMP_NTZ,false,,,,true,false,Run start timestamp
+END_TIME,TIMESTAMP_NTZ,true,,,,false,false,Run end timestamp
+TOTAL_RULES,"NUMBER(18,0)",true,0,,,false,false,Total number of rules executed
+PASSED,"NUMBER(18,0)",true,0,,,false,false,Number of rules that passed
+FAILED,"NUMBER(18,0)",true,0,,,false,false,Number of rules that failed
+ERRORED,"NUMBER(18,0)",true,0,,,false,false,Number of rules that errored
+TRIGGERED_BY,VARCHAR(128),true,,,,false,false,Who or what triggered the run
+ENVIRONMENT,VARCHAR(16),false,,,,false,false,Environment where run was executed

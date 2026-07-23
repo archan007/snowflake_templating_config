@@ -1,0 +1,12 @@
+column_name,data_type,nullable,default_value,rule,transform_logic,clustering_key,business_key,description
+RESULT_ID,VARCHAR(64),false,,primary identifier,,false,true,Unique result identifier
+RULE_ID,VARCHAR(64),false,,,,false,false,FK to DQ_RULES
+RUN_ID,VARCHAR(64),false,,,,false,false,FK to DQ_RUN_LOG
+RUN_TIMESTAMP,TIMESTAMP_NTZ,false,,,,true,false,Execution timestamp
+STATUS,VARCHAR(16),false,,,,false,false,"Result status: PASSED, FAILED, ERROR"
+ACTUAL_VALUE,VARCHAR(4096),true,,,,false,false,Actual value observed
+EXPECTED_VALUE,VARCHAR(4096),true,,,,false,false,Expected value for comparison
+ROWS_FAILED,"NUMBER(38,0)",true,0,,,false,false,Number of rows that failed the check
+SAMPLE_FAILURES,VARIANT,true,,,,false,false,Sample of failing rows (JSON array)
+EXECUTION_TIME_MS,"NUMBER(18,0)",true,,,,false,false,Rule execution time in milliseconds
+ENVIRONMENT,VARCHAR(16),false,,,,false,false,Environment where rule was executed
