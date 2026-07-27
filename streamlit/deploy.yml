@@ -11,7 +11,7 @@ Usage:
   python -m streamlit.deploy --env DEV
 
 Environment variables required:
-  SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH (or SNOWFLAKE_PASSWORD),
+  SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH (or SNOWFLAKE_PRIVATE_KEY),
   SNOWFLAKE_DATABASE, SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE
 """
 from __future__ import annotations
@@ -26,23 +26,30 @@ import snowflake.connector
 
 
 def _connect() -> snowflake.connector.SnowflakeConnection:
-    """Create Snowflake connection from environment variables."""
-    params: dict = {
-        "account": os.environ["SNOWFLAKE_ACCOUNT"],
-        "user": os.environ["SNOWFLAKE_USER"],
-        "database": os.environ["SNOWFLAKE_DATABASE"],
-        "role": os.environ.get("SNOWFLAKE_ROLE"),
-        "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE"),
-    }
+    """Create Snowflake connection using key-pair authentication."""
+    from engine.state_reader import _load_private_key
 
-    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if pk_path:
-        from engine.state_reader import _load_private_key
-        params["private_key"] = _load_private_key(pk_path)
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH", "")
+    pk_raw = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "")
+
+    if pk_path and os.path.isfile(pk_path):
+        private_key = _load_private_key(pk_path)
+    elif pk_raw:
+        private_key = _load_private_key(pk_raw)
     else:
-        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+        raise RuntimeError(
+            "Key-pair authentication required. Set SNOWFLAKE_PRIVATE_KEY_PATH "
+            "(file path) or SNOWFLAKE_PRIVATE_KEY (PEM string)."
+        )
 
-    return snowflake.connector.connect(**params)
+    return snowflake.connector.connect(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        private_key=private_key,
+        database=os.environ["SNOWFLAKE_DATABASE"],
+        role=os.environ.get("SNOWFLAKE_ROLE"),
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE"),
+    )
 
 
 def _hash_directory(directory: Path) -> str:
@@ -81,7 +88,7 @@ def deploy(env: str, force: bool = False) -> int:
     dq_warehouse = os.environ.get("DQ_WAREHOUSE", f"WH_{env.upper()}_DQ")
     schema = "DQ"
     stage_name = f"{database}.{schema}.STG_STREAMLIT_DQ"
-    app_name = f"{database}.{schema}.DQ_DASHBOARD"
+    app_name = f"{database}.{schema}.FS_CI_DQ_DASHBOARD"
     hash_table = "STREAMLIT_DEPLOY_STATE"
     streamlit_dir = Path(__file__).parent
 

@@ -1,65 +1,93 @@
 """
 Data Quality Dashboard - Streamlit Application
 
-Connects to Snowflake and displays:
-  - Rule overview with pass/fail status
-  - Run history with trends
-  - Rule detail drill-down
-  - Exploratory stats from DMFs
-  - Rule management (create/edit user rules, view engine rules)
+Runs as a Streamlit-in-Snowflake (SiS) app. The connection is provided
+automatically by the Snowflake runtime -- no credentials required.
+The app inherits the role and warehouse assigned at deployment time.
 
-Configuration:
-  Set environment variables or use Streamlit secrets:
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD,
-    SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE
+When running locally for development, set SNOWFLAKE_PRIVATE_KEY_PATH
+(or SNOWFLAKE_PRIVATE_KEY as a PEM string) along with SNOWFLAKE_ACCOUNT,
+SNOWFLAKE_USER, SNOWFLAKE_DATABASE, SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE.
+Password auth is intentionally not supported.
 """
+from __future__ import annotations
+
 import os
 from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
 
-try:
+_IS_SIS = os.getenv("SNOWFLAKE_IS_SIS", "").lower() in ("1", "true", "yes") or \
+    "SNOWFLAKE_HOST" in os.environ
+
+
+def _get_sis_session():
+    """Get the active Snowpark session provided by the SiS runtime."""
+    from snowflake.snowpark.context import get_active_session
+    return get_active_session()
+
+
+def _get_local_connection():
+    """Build a key-pair authenticated connection for local development."""
     import snowflake.connector
-    HAS_SNOWFLAKE = True
-except ImportError:
-    HAS_SNOWFLAKE = False
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
 
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH", "")
+    pk_raw = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "")
 
-def get_connection():
-    """Create Snowflake connection from env vars or Streamlit secrets."""
-    if hasattr(st, "secrets") and "snowflake" in st.secrets:
-        cfg = st.secrets["snowflake"]
+    if pk_path and os.path.isfile(pk_path):
+        with open(pk_path, "rb") as f:
+            pem_bytes = f.read()
+    elif pk_raw:
+        pem_bytes = pk_raw.encode()
     else:
-        cfg = {
-            "account": os.getenv("SNOWFLAKE_ACCOUNT", ""),
-            "user": os.getenv("SNOWFLAKE_USER", ""),
-            "password": os.getenv("SNOWFLAKE_PASSWORD", ""),
-            "database": os.getenv("SNOWFLAKE_DATABASE", ""),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", ""),
-            "role": os.getenv("SNOWFLAKE_ROLE", ""),
-        }
-    return snowflake.connector.connect(**cfg)
+        raise RuntimeError(
+            "No Snowflake credentials configured. Set SNOWFLAKE_PRIVATE_KEY_PATH "
+            "or SNOWFLAKE_PRIVATE_KEY for local development."
+        )
+
+    pk = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+    pk_der = pk.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    return snowflake.connector.connect(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        private_key=pk_der,
+        database=os.environ.get("SNOWFLAKE_DATABASE", ""),
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", ""),
+        role=os.environ.get("SNOWFLAKE_ROLE", ""),
+    )
 
 
 @st.cache_data(ttl=60)
 def run_query(query: str) -> pd.DataFrame:
     """Execute a query and return results as a DataFrame."""
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(query)
-        cols = [desc[0] for desc in cur.description]
-        rows = cur.fetchall()
-        return pd.DataFrame(rows, columns=cols)
-    finally:
-        conn.close()
+    if _IS_SIS:
+        session = _get_sis_session()
+        return session.sql(query).to_pandas()
+    else:
+        conn = _get_local_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(query)
+            cols = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+            return pd.DataFrame(rows, columns=cols)
+        finally:
+            conn.close()
 
 
 def get_database() -> str:
-    if hasattr(st, "secrets") and "snowflake" in st.secrets:
-        return st.secrets["snowflake"].get("database", "")
-    return os.getenv("SNOWFLAKE_DATABASE", "")
+    if _IS_SIS:
+        session = _get_sis_session()
+        return session.get_current_database().replace('"', '')
+    return os.environ.get("SNOWFLAKE_DATABASE", "")
 
 
 # ---------------------------------------------------------------------------
@@ -102,13 +130,19 @@ page = st.sidebar.radio(
 )
 
 # ---------------------------------------------------------------------------
-# Demo mode fallback (when Snowflake is not configured)
+# Demo mode fallback (when running outside Snowflake without key-pair config)
 # ---------------------------------------------------------------------------
 
-DEMO_MODE = not HAS_SNOWFLAKE or not os.getenv("SNOWFLAKE_ACCOUNT", "")
+DEMO_MODE = not _IS_SIS and not (
+    os.getenv("SNOWFLAKE_ACCOUNT") and
+    (os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH") or os.getenv("SNOWFLAKE_PRIVATE_KEY"))
+)
 
 if DEMO_MODE:
-    st.sidebar.warning("Demo mode: using sample data. Configure Snowflake credentials for live data.")
+    st.sidebar.warning(
+        "Demo mode: using sample data. "
+        "When deployed as Streamlit-in-Snowflake, live data is used automatically."
+    )
 
 
 def _demo_rules() -> pd.DataFrame:
