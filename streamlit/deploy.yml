@@ -1,0 +1,198 @@
+"""
+Streamlit in Snowflake (SiS) Deployment Script
+
+Handles:
+  1. Creating the internal stage for Streamlit files
+  2. Uploading app files to the stage
+  3. Creating OR updating the Streamlit app object
+  4. Change detection via MD5 to avoid unnecessary restarts
+
+Usage:
+  python -m streamlit.deploy --env DEV
+
+Environment variables required:
+  SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH (or SNOWFLAKE_PASSWORD),
+  SNOWFLAKE_DATABASE, SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import sys
+from pathlib import Path
+
+import snowflake.connector
+
+
+def _connect() -> snowflake.connector.SnowflakeConnection:
+    """Create Snowflake connection from environment variables."""
+    params: dict = {
+        "account": os.environ["SNOWFLAKE_ACCOUNT"],
+        "user": os.environ["SNOWFLAKE_USER"],
+        "database": os.environ["SNOWFLAKE_DATABASE"],
+        "role": os.environ.get("SNOWFLAKE_ROLE"),
+        "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE"),
+    }
+
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if pk_path:
+        from engine.state_reader import _load_private_key
+        params["private_key"] = _load_private_key(pk_path)
+    else:
+        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+
+    return snowflake.connector.connect(**params)
+
+
+def _hash_directory(directory: Path) -> str:
+    """Compute a stable hash of all .py files in the directory."""
+    hasher = hashlib.sha256()
+    for f in sorted(directory.glob("**/*.py")):
+        hasher.update(f.name.encode())
+        hasher.update(f.read_bytes())
+    return hasher.hexdigest()[:16]
+
+
+def _get_deployed_hash(cur, schema: str, hash_table: str) -> str | None:
+    """Retrieve the last deployed hash from the tracking table."""
+    try:
+        cur.execute(f"SELECT CONTENT_HASH FROM {schema}.{hash_table} WHERE APP_NAME = 'DQ_DASHBOARD'")
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _update_deployed_hash(cur, schema: str, hash_table: str, content_hash: str):
+    """Update the tracking table with the new hash."""
+    cur.execute(f"""
+        MERGE INTO {schema}.{hash_table} tgt
+        USING (SELECT 'DQ_DASHBOARD' AS APP_NAME, '{content_hash}' AS CONTENT_HASH) src
+        ON tgt.APP_NAME = src.APP_NAME
+        WHEN MATCHED THEN UPDATE SET CONTENT_HASH = src.CONTENT_HASH, UPDATED_AT = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT (APP_NAME, CONTENT_HASH, UPDATED_AT) VALUES (src.APP_NAME, src.CONTENT_HASH, CURRENT_TIMESTAMP())
+    """)
+
+
+def deploy(env: str, force: bool = False) -> int:
+    """Deploy the Streamlit app to Snowflake."""
+    database = os.environ["SNOWFLAKE_DATABASE"]
+    dq_warehouse = os.environ.get("DQ_WAREHOUSE", f"WH_{env.upper()}_DQ")
+    schema = "DQ"
+    stage_name = f"{database}.{schema}.STG_STREAMLIT_DQ"
+    app_name = f"{database}.{schema}.DQ_DASHBOARD"
+    hash_table = "STREAMLIT_DEPLOY_STATE"
+    streamlit_dir = Path(__file__).parent
+
+    # Compute content hash
+    content_hash = _hash_directory(streamlit_dir)
+    print(f"[sis-deploy] Content hash: {content_hash}")
+
+    conn = _connect()
+    cur = conn.cursor()
+
+    try:
+        # Ensure tracking table exists
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {database}.{schema}.{hash_table} (
+                APP_NAME VARCHAR(128) NOT NULL PRIMARY KEY,
+                CONTENT_HASH VARCHAR(64) NOT NULL,
+                UPDATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+            )
+        """)
+
+        # Check if content has changed
+        deployed_hash = _get_deployed_hash(cur, f"{database}.{schema}", hash_table)
+        if deployed_hash == content_hash and not force:
+            print(f"[sis-deploy] No changes detected (hash={content_hash}). Skipping deployment.")
+            print(f"[sis-deploy] Use --force to redeploy anyway.")
+            return 0
+
+        if deployed_hash:
+            print(f"[sis-deploy] Change detected: {deployed_hash} -> {content_hash}")
+        else:
+            print(f"[sis-deploy] First deployment (no previous hash found)")
+
+        # Create stage
+        print(f"[sis-deploy] Creating stage: {stage_name}")
+        cur.execute(f"""
+            CREATE STAGE IF NOT EXISTS {stage_name}
+            DIRECTORY = (ENABLE = TRUE)
+            COMMENT = 'Streamlit application files for DQ Dashboard'
+        """)
+
+        # Upload files
+        py_files = list(streamlit_dir.glob("*.py"))
+        print(f"[sis-deploy] Uploading {len(py_files)} file(s) to stage...")
+        for f in py_files:
+            local_path = str(f.resolve())
+            cur.execute(
+                f"PUT 'file://{local_path}' @{stage_name}/dq_dashboard/ "
+                f"OVERWRITE=TRUE AUTO_COMPRESS=FALSE"
+            )
+            print(f"         - {f.name}")
+
+        # Upload environment.yml if it exists (for pip dependencies in SiS)
+        env_yml = streamlit_dir / "environment.yml"
+        if env_yml.exists():
+            cur.execute(
+                f"PUT 'file://{env_yml.resolve()}' @{stage_name}/dq_dashboard/ "
+                f"OVERWRITE=TRUE AUTO_COMPRESS=FALSE"
+            )
+            print(f"         - environment.yml")
+
+        # Create or update the Streamlit app
+        print(f"[sis-deploy] Creating/updating Streamlit app: {app_name}")
+
+        # Check if app already exists
+        cur.execute(f"SHOW STREAMLITS LIKE 'DQ_DASHBOARD' IN SCHEMA {database}.{schema}")
+        app_exists = cur.fetchone() is not None
+
+        if app_exists:
+            cur.execute(f"""
+                ALTER STREAMLIT {app_name} SET
+                    ROOT_LOCATION = '@{stage_name}/dq_dashboard'
+                    MAIN_FILE = 'app.py'
+                    QUERY_WAREHOUSE = {dq_warehouse}
+            """)
+            print(f"[sis-deploy] Updated existing Streamlit app")
+        else:
+            cur.execute(f"""
+                CREATE STREAMLIT {app_name}
+                    ROOT_LOCATION = '@{stage_name}/dq_dashboard'
+                    MAIN_FILE = 'app.py'
+                    QUERY_WAREHOUSE = {dq_warehouse}
+                    COMMENT = 'Data Quality Dashboard - DQ Tower'
+            """)
+            print(f"[sis-deploy] Created new Streamlit app")
+
+        # Update hash tracking
+        _update_deployed_hash(cur, f"{database}.{schema}", hash_table, content_hash)
+        print(f"[sis-deploy] Deployment complete. Hash recorded: {content_hash}")
+
+        # Grant access
+        dq_reader_role = os.environ.get("DQ_READER_ROLE", "ROLE_DQ_READER")
+        try:
+            cur.execute(f"GRANT USAGE ON STREAMLIT {app_name} TO ROLE {dq_reader_role}")
+            print(f"[sis-deploy] Granted USAGE to {dq_reader_role}")
+        except Exception as e:
+            print(f"[sis-deploy] Warning: Could not grant to {dq_reader_role}: {e}")
+
+        return 0
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Deploy Streamlit DQ Dashboard to Snowflake")
+    parser.add_argument("--env", required=True, help="Target environment (DEV, UAT, PROD)")
+    parser.add_argument("--force", action="store_true", help="Force redeploy even if no changes detected")
+    args = parser.parse_args()
+    return deploy(args.env, args.force)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,8 @@
+name: snowflake
+version: "1.0"
+channels:
+  - snowflake
+dependencies:
+  - streamlit=1.35.0
+  - snowflake-snowpark-python
+  - pandas

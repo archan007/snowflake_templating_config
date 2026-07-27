@@ -1,0 +1,6 @@
+- name: Deploy Streamlit DQ Dashboard
+  run: |
+    python -m streamlit.deploy --env "$TARGET_ENV"
+  env:
+    DQ_WAREHOUSE: ${{ secrets.SNOWFLAKE_DEV_DQ_WAREHOUSE || 'WH_DEV_DQ' }}
+    DQ_READER_ROLE: ${{ secrets.DQ_READER_ROLE || 'ROLE_DQ_READER' }}
