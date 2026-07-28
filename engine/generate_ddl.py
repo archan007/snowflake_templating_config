@@ -399,11 +399,15 @@ def write_changesets(changesets: list[Changeset], output_root: Path) -> Path:
         '        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">'
     )
     # Include in execution order
-    for op in ["create", "alter", "grant", "drop"]:
+    for op in ["create", "alter", "seed", "grant", "drop"]:
         if op == "grant":
             f = "changesets/grant_grant.sql"
             if f in generated_files:
                 master.append(f'  <include file="{f}" relativeToChangelogFile="true"/>')
+        elif op == "seed":
+            for f in sorted(generated_files):
+                if f.startswith("changesets/seed_"):
+                    master.append(f'  <include file="{f}" relativeToChangelogFile="true"/>')
         else:
             order = CREATE_ORDER if op != "drop" else DROP_ORDER
             for obj_type in order:

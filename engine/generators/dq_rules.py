@@ -40,11 +40,11 @@ def _escape_sql_string(s: str) -> str:
 
 
 def discover_dq_rules(bundle: Bundle) -> list[Path]:
-    """Find all dq_rules/*.yaml files in a bundle directory."""
+    """Find all dq_rules/*.yaml and *.yml files in a bundle directory."""
     dq_dir = bundle.path / "dq_rules"
     if not dq_dir.exists():
         return []
-    return sorted(dq_dir.glob("*.yaml"))
+    return sorted([*dq_dir.glob("*.yaml"), *dq_dir.glob("*.yml")])
 
 
 def load_dq_rules(bundle: Bundle, env: str, platform_vars: dict[str, str]) -> list[dict[str, Any]]:

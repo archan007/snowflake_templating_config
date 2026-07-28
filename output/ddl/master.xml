@@ -10,6 +10,7 @@
   <include file="changesets/create_stream.sql" relativeToChangelogFile="true"/>
   <include file="changesets/create_view.sql" relativeToChangelogFile="true"/>
   <include file="changesets/create_dynamic_table.sql" relativeToChangelogFile="true"/>
+  <include file="changesets/create_data_metric_function.sql" relativeToChangelogFile="true"/>
   <include file="changesets/create_stored_procedure.sql" relativeToChangelogFile="true"/>
   <include file="changesets/create_task.sql" relativeToChangelogFile="true"/>
   <include file="changesets/grant_grant.sql" relativeToChangelogFile="true"/>
