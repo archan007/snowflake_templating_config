@@ -44,6 +44,7 @@ CREATE_ORDER = [
     "stream",
     "view",
     "dynamic_table",
+    "data_metric_function",
     "stored_procedure",
     "task",
 ]
@@ -60,6 +61,7 @@ IGNORED_OBJECT_SUFFIXES = {
 DROP_ORDER = [
     "task",
     "stored_procedure",
+    "data_metric_function",
     "dynamic_table",
     "view",
     "stream",
@@ -263,6 +265,18 @@ def compute_changesets(
                     runOnChange=True,
                 ))
 
+            elif obj_type == "data_metric_function":
+                sql = og.generate_create_data_metric_function(obj)
+                changesets.append(Changeset(
+                    id=_hash_id("dmf", fqn, sql),
+                    author=author,
+                    object_type="data_metric_function",
+                    operation="create",
+                    fqn=fqn, sql=sql,
+                    rollback=og.generate_drop_data_metric_function(fqn),
+                    runOnChange=True,
+                ))
+
     # ---- Grants: emit GRANT statements for bundles that define them ----
     for bundle in bundles:
         grant_stmts = gg.generate_grants(bundle)
@@ -314,6 +328,8 @@ def compute_changesets(
             sql = og.generate_drop_stage(fqn)
         elif ex_obj.object_type == "file_format":
             sql = og.generate_drop_file_format(fqn)
+        elif ex_obj.object_type == "data_metric_function":
+            sql = og.generate_drop_data_metric_function(fqn)
         else:
             continue
 
@@ -475,6 +491,22 @@ def main() -> int:
         )
         changesets.append(dq_seed_changeset)
         print(f"[engine] Generated DQ seed changeset with {len(all_dq_rules)} rule(s)")
+
+        # Generate DMF DDL from rules marked with dmf: true
+        dmf_definitions = dq.generate_dmf_ddl(all_dq_rules, dq_database)
+        if dmf_definitions:
+            for dmf_def in dmf_definitions:
+                changesets.append(Changeset(
+                    id=_hash_id("dmf", dmf_def["fqn"], dmf_def["sql"]),
+                    author="engine",
+                    object_type="data_metric_function",
+                    operation="create",
+                    fqn=dmf_def["fqn"],
+                    sql=dmf_def["sql"],
+                    rollback=dmf_def["drop_sql"],
+                    runOnChange=True,
+                ))
+            print(f"[engine] Generated {len(dmf_definitions)} DMF(s) from DQ rules")
     else:
         print("[engine] No DQ rules found in bundles")
 

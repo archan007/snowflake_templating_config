@@ -186,6 +186,7 @@ KNOWN_PROPERTIES: dict[str, set[str]] = {
     "dynamic_table": {"name", "schema", "description", "sql_file", "warehouse", "target_lag", "refresh_mode"},
     "stage": {"name", "schema", "description", "url", "storage_integration", "file_format"},
     "file_format": {"name", "schema", "description", "type", "options"},
+    "data_metric_function": {"name", "schema", "description", "sql_file", "data_type", "return_type"},
 }
 
 
@@ -232,6 +233,7 @@ def load_bundle(bundle_yaml: Path, env: str, platform_cfg: dict[str, Any]) -> Bu
         ("dynamic_tables", "dynamic_table"),
         ("stages", "stage"),
         ("file_formats", "file_format"),
+        ("data_metric_functions", "data_metric_function"),
     ]:
         for item in raw.get(obj_type_plural, []) or []:
             schema = item.get("schema", default_schema)

@@ -1,8 +1,9 @@
 """
-Generator for DQ rule seeding SQL.
+Generator for DQ rule seeding SQL and Data Metric Function DDL.
 
-Reads dq_rules/*.yaml files from each bundle directory and generates
-MERGE statements that upsert engine-managed rules into the DQ_RULES table.
+Reads dq_rules/*.yaml files from each bundle directory and generates:
+1. MERGE statements that upsert engine-managed rules into the DQ_RULES table.
+2. CREATE OR REPLACE DATA METRIC FUNCTION DDL for rules marked with dmf: true.
 
 Rule YAML format:
     target_table: <TABLE_NAME>
@@ -15,6 +16,7 @@ Rule YAML format:
         column: <optional column name>
         severity: CRITICAL | WARNING | INFO
         description: <text>
+        dmf: true  # optional - generate a Snowflake Data Metric Function
         parameters:
           <rule-type-specific params>
 """
@@ -27,6 +29,10 @@ from typing import Any
 import yaml
 
 from ..config_loader import Bundle, resolve_placeholders
+
+
+# Rule types that can be expressed as a Data Metric Function
+DMF_SUPPORTED_TYPES = {"NOT_NULL", "UNIQUE", "EXPRESSION", "CUSTOM_SQL", "ACCEPTED_VALUES"}
 
 
 def _escape_sql_string(s: str) -> str:
@@ -73,9 +79,109 @@ def load_dq_rules(bundle: Bundle, env: str, platform_vars: dict[str, str]) -> li
                 "parameters": rule_def.get("parameters"),
                 "description": rule_def.get("description", ""),
                 "owner": owner,
+                "dmf": rule_def.get("dmf", False),
             })
 
     return all_rules
+
+
+def _generate_dmf_body(rule: dict[str, Any]) -> str | None:
+    """Generate the SQL body for a DMF based on rule type.
+
+    Returns None if the rule type cannot be expressed as a DMF.
+    """
+    rule_type = rule["rule_type"].upper()
+    column = rule.get("target_column")
+    params = rule.get("parameters") or {}
+
+    if rule_type == "NOT_NULL" and column:
+        return f'SELECT COUNT(*) FROM T WHERE "{column}" IS NULL'
+
+    if rule_type == "UNIQUE" and column:
+        return f'SELECT COUNT(*) - COUNT(DISTINCT "{column}") FROM T'
+
+    if rule_type == "ACCEPTED_VALUES" and column:
+        values = params.get("values", [])
+        if not values:
+            return None
+        values_list = ", ".join(f"'{_escape_sql_string(str(v))}'" for v in values)
+        return (
+            f'SELECT COUNT(*) FROM T\n'
+            f'WHERE "{column}" IS NOT NULL\n'
+            f'  AND "{column}" NOT IN ({values_list})'
+        )
+
+    if rule_type == "EXPRESSION" and column:
+        expression = params.get("expression", "")
+        if not expression:
+            return None
+        return f'SELECT COUNT(*) FROM T WHERE NOT ({expression})'
+
+    if rule_type == "CUSTOM_SQL":
+        sql = params.get("sql", "")
+        return sql if sql else None
+
+    return None
+
+
+def _dmf_data_type(rule: dict[str, Any]) -> str:
+    """Determine the DMF input signature based on the rule."""
+    rule_type = rule["rule_type"].upper()
+    column = rule.get("target_column")
+
+    if rule_type == "CUSTOM_SQL":
+        # Table-level DMF: accepts the whole table
+        col_spec = rule.get("parameters", {}).get("dmf_columns")
+        if col_spec:
+            return f"T TABLE({col_spec})"
+        return "T TABLE(T TABLE(*))"
+
+    if column:
+        col_type = (rule.get("parameters") or {}).get("column_type", "VARCHAR")
+        return f'T TABLE("{column}" {col_type})'
+
+    return "T TABLE(T TABLE(*))"
+
+
+def generate_dmf_ddl(rules: list[dict[str, Any]], database: str) -> list[dict[str, str]]:
+    """Generate CREATE OR REPLACE DATA METRIC FUNCTION statements.
+
+    Returns a list of dicts with keys: fqn, sql, drop_sql
+    Only processes rules that have dmf: true and a supported type.
+    """
+    results: list[dict[str, str]] = []
+    delim = chr(36) * 2
+
+    for rule in rules:
+        if not rule.get("dmf"):
+            continue
+
+        rule_type = rule["rule_type"].upper()
+        if rule_type not in DMF_SUPPORTED_TYPES:
+            continue
+
+        body = _generate_dmf_body(rule)
+        if body is None:
+            continue
+
+        schema = rule["target_schema"]
+        dmf_name = f"DMF_{rule['rule_name'].upper()}"
+        fqn = f"{database}.{schema}.{dmf_name}"
+        data_type = _dmf_data_type(rule)
+        return_type = "NUMBER"
+
+        sql = (
+            f"CREATE OR REPLACE DATA METRIC FUNCTION {fqn}\n"
+            f"  ({data_type})\n"
+            f"  RETURNS {return_type}\n"
+            f"AS\n{delim}\n{body}\n{delim};"
+        )
+
+        drop_sql = f"DROP DATA METRIC FUNCTION IF EXISTS {fqn};"
+
+        results.append({"fqn": fqn, "sql": sql, "drop_sql": drop_sql, "rule_id": rule["rule_id"]})
+
+    return results
 
 
 def generate_dq_seed_sql(rules: list[dict[str, Any]], database: str) -> str:

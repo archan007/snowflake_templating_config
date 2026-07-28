@@ -9,12 +9,14 @@ rules:
     column: CUSTOMER_ID
     severity: CRITICAL
     description: "CUSTOMER_ID must never be null"
+    dmf: true
 
   - name: raw_customers_customer_id_unique
     type: UNIQUE
     column: CUSTOMER_ID
     severity: CRITICAL
     description: "CUSTOMER_ID must be unique"
+    dmf: true
 
   - name: raw_customers_has_data
     type: ROW_COUNT_RANGE
