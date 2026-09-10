@@ -107,6 +107,10 @@ class DropSafetyError(Exception):
     """Raised when a breaking drop is detected without explicit confirmation."""
 
 
+class TaskDependencyError(Exception):
+    """Raised when task 'after' dependencies can't be resolved into a valid order."""
+
+
 def _hash_id(obj_type: str, fqn: str, sql: str) -> str:
     """Deterministic changeset id from type + fqn + sql hash."""
     h = hashlib.sha256(sql.encode()).hexdigest()[:8]
@@ -125,6 +129,54 @@ def _collect_desired(bundles: list[Bundle]) -> dict[str, ObjectDef]:
                 )
             desired[obj.fqn] = obj
     return desired
+
+
+def _order_tasks_by_dependency(tasks: list[ObjectDef]) -> list[ObjectDef]:
+    """Topologically sort tasks so a predecessor (`after:`) is always created
+    before the tasks that depend on it, regardless of alphabetical FQN order.
+
+    Snowflake requires the predecessor task to already exist when a task is
+    created with `AFTER <predecessor>`. Without this, tasks emitted in plain
+    FQN order can create a child task before its parent, which fails the
+    deploy for a same-run parent/child pair. `after` references to tasks
+    outside this deploy's task set (already deployed previously) are treated
+    as already-satisfied and don't affect ordering.
+    """
+    by_fqn = {t.fqn: t for t in tasks}
+    name_to_fqn = {t.name.upper(): t.fqn for t in tasks}
+
+    def resolve(ref: str) -> str | None:
+        ref_upper = ref.upper()
+        if ref_upper in by_fqn:
+            return ref_upper
+        return name_to_fqn.get(ref_upper)
+
+    # Build predecessor edges: fqn -> set of predecessor fqns (within this task set)
+    deps: dict[str, set[str]] = {}
+    for t in tasks:
+        after = t.props.get("after", [])
+        if isinstance(after, str):
+            after = [after]
+        resolved = {resolve(a) for a in after}
+        deps[t.fqn] = {r for r in resolved if r is not None}
+
+    ordered: list[ObjectDef] = []
+    remaining = {t.fqn for t in tasks}
+    while remaining:
+        # Ready = no unresolved predecessor left in `remaining`. Break ties
+        # alphabetically for deterministic, reviewable output.
+        ready = sorted(fqn for fqn in remaining if not (deps[fqn] & remaining))
+        if not ready:
+            cycle = ", ".join(sorted(remaining))
+            raise TaskDependencyError(
+                "\n\n*** TASK DEPENDENCY CYCLE DETECTED ***\n\n"
+                "The following tasks have an 'after' dependency cycle and "
+                f"cannot be ordered: {cycle}\n"
+            )
+        for fqn in ready:
+            ordered.append(by_fqn[fqn])
+            remaining.discard(fqn)
+    return ordered
 
 
 def _all_confirmed_drops(bundles: list[Bundle]) -> set[str]:
@@ -153,9 +205,22 @@ def compute_changesets(
     confirmed_drops = _all_confirmed_drops(bundles)
     changesets: list[Changeset] = []
 
+    # Tasks are ordered by their 'after' dependency graph (parents before
+    # children) rather than plain alphabetical FQN, so a parent/child task
+    # pair added in the same deploy is emitted in a single, valid order.
+    ordered_tasks = _order_tasks_by_dependency(
+        [o for o in desired.values() if o.object_type == "task"]
+    )
+
     # ---- Creates and alters, in dependency order ----
     for obj_type in CREATE_ORDER:
-        for fqn, obj in sorted(desired.items()):
+        if obj_type == "task":
+            type_items = [(t.fqn, t) for t in ordered_tasks]
+        else:
+            type_items = sorted(
+                (fqn, obj) for fqn, obj in desired.items() if obj.object_type == obj_type
+            )
+        for fqn, obj in type_items:
             if obj.object_type != obj_type:
                 continue
 
@@ -465,7 +530,7 @@ def main() -> int:
     print("[engine] Computing changesets...")
     try:
         changesets = compute_changesets(bundles, existing, liquibase_tracked=liquibase_tracked)
-    except DropSafetyError as e:
+    except (DropSafetyError, TaskDependencyError) as e:
         print(str(e), file=sys.stderr)
         return 2
 
